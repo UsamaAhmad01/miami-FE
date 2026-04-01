@@ -91,7 +91,7 @@ function CustomerTicketsContent() {
 
   const pendingCount = tickets.filter((t) => t.status?.toLowerCase() === "pending").length;
   const completedCount = tickets.filter((t) => t.status?.toLowerCase() === "completed").length;
-  const totalRevenue = tickets.reduce((sum, t) => sum + (t.total_services_price || t.total_price || 0), 0);
+  const totalRevenue = tickets.reduce((sum, t) => sum + (Number(t.total_services_price || t.total_price) || 0), 0);
 
   return (
     <PageShell>

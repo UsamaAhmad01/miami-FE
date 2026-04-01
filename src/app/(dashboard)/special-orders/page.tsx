@@ -44,7 +44,7 @@ export default function SpecialOrdersPage() {
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <KpiCard title="Total" value={String(tickets.length)} icon={Wrench} />
         <KpiCard title="Pending" value={String(tickets.filter((t) => t.status?.toLowerCase() === "pending").length)} icon={Clock} />
-        <KpiCard title="Value" value={`$${tickets.reduce((s, t) => s + (t.total_services_price || t.total_price || 0), 0).toFixed(0)}`} icon={DollarSign} />
+        <KpiCard title="Value" value={`$${tickets.reduce((s, t) => s + (Number(t.total_services_price || t.total_price) || 0), 0).toFixed(0)}`} icon={DollarSign} />
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

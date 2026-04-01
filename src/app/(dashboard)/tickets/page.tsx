@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import Link from "next/link";
 import {
   Plus, LayoutList, Kanban, DollarSign, Wrench, Clock, Download, Trash2,
@@ -27,21 +27,41 @@ export default function TicketsPage() {
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [bulkModal, setBulkModal] = useState<BulkModal>(null);
 
+  // Pagination + search state
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
   const { user } = useAuthStore();
   const branch = user?.branch_name || "";
 
-  // Fetch tickets from real API
+  // Debounce search — 800ms delay like PHP's 2s but snappier
+  useEffect(() => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(0); // Reset to first page on new search
+    }, 800);
+    return () => clearTimeout(debounceRef.current);
+  }, [search]);
+
+  // Fetch tickets with server-side pagination
   const { data: ticketsResponse, isLoading } = useTicketsByBranch(branch, {
     special_order: specialOrders ? "Yes" : undefined,
-    length: 50,
+    start: page * pageSize,
+    length: pageSize,
+    search: debouncedSearch,
   });
 
   const tickets: ApiTicket[] = (ticketsResponse?.data || []) as unknown as ApiTicket[];
+  const totalRecords = (ticketsResponse?.recordsFiltered ?? ticketsResponse?.recordsTotal) || tickets.length;
 
   const exportMutation = useExportTickets(branch);
   const deleteMutation = useDeleteTicket();
 
-  // Compute ticket counts for filters
+  // Compute ticket counts for filters (from current page — approximate)
   const ticketCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     tickets.forEach((t) => {
@@ -51,23 +71,9 @@ export default function TicketsPage() {
     return counts;
   }, [tickets]);
 
-  const toggleStatus = (status: string) => {
-    setStatusFilter((prev) => prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]);
-  };
-
-  const toggleRow = (id: string) => {
-    setSelectedRows((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleAll = () => {
-    const allIds = tickets.map((t) => t.automatic_generated_invoice_number);
-    const allSelected = allIds.every((id) => selectedRows.has(id));
-    setSelectedRows(allSelected ? new Set() : new Set(allIds));
-  };
+  const toggleStatus = (status: string) => setStatusFilter((prev) => prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]);
+  const toggleRow = (id: string) => setSelectedRows((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const toggleAll = () => { const allIds = tickets.map((t) => t.automatic_generated_invoice_number); setSelectedRows(allIds.every((id) => selectedRows.has(id)) ? new Set() : new Set(allIds)); };
 
   const handleDelete = async (invoiceNumber: string) => {
     try {
@@ -78,26 +84,26 @@ export default function TicketsPage() {
     }
   };
 
-  const handleExport = () => {
-    exportMutation.mutate(Array.from(selectedRows));
-  };
+  const handleExport = () => exportMutation.mutate(Array.from(selectedRows));
+  const handlePageSizeChange = (size: number) => { setPageSize(size); setPage(0); };
 
   const selectedIdsArray = Array.from(selectedRows);
 
-  // KPI calculations from live data
+  // KPI calculations — use Number() to handle string values from API
   const pendingCount = tickets.filter((t) => t.status?.toLowerCase() === "pending").length;
   const completedCount = tickets.filter((t) => t.status?.toLowerCase() === "completed").length;
-  const unpaidTotal = tickets.filter((t) => {
-    const ps = (t.payment_status || "").toLowerCase().replace(/[\s_]/g, "");
-    return ps !== "fullypaid" && ps !== "paid";
-  }).reduce((sum, t) => sum + (t.total_price || 0), 0);
-  const completedRevenue = tickets.filter((t) => t.status?.toLowerCase() === "completed").reduce((sum, t) => sum + (t.total_price || 0), 0);
+  const unpaidTotal = tickets
+    .filter((t) => { const ps = (t.payment_status || "").toLowerCase().replace(/[\s_]/g, ""); return ps !== "fullypaid" && ps !== "paid"; })
+    .reduce((sum, t) => sum + (Number(t.total_price) || 0), 0);
+  const completedRevenue = tickets
+    .filter((t) => t.status?.toLowerCase() === "completed")
+    .reduce((sum, t) => sum + (Number(t.total_price) || 0), 0);
 
   return (
     <PageShell>
       <PageHeader
         title="Tickets"
-        description={`${branch} — ${tickets.length} total tickets`}
+        description={`${branch} — ${totalRecords} total tickets`}
         actions={
           <div className="flex items-center gap-2">
             <div className="flex items-center rounded-md border bg-muted/40 p-0.5">
@@ -115,7 +121,7 @@ export default function TicketsPage() {
         }
       />
 
-      {/* KPIs from real data */}
+      {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard title="Pending" value={String(pendingCount)} icon={Wrench} />
         <KpiCard title="Completed" value={String(completedCount)} icon={Clock} trend="up" />
@@ -158,6 +164,13 @@ export default function TicketsPage() {
             onPaymentClick={() => {}}
             onDelete={handleDelete}
             loading={isLoading}
+            page={page}
+            pageSize={pageSize}
+            totalRecords={totalRecords}
+            onPageChange={setPage}
+            onPageSizeChange={handlePageSizeChange}
+            search={search}
+            onSearchChange={setSearch}
           />
         </>
       )}

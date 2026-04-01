@@ -92,76 +92,97 @@ export default function EditTicketPage() {
 
   // Populate form when ticket data loads
   if (ticketData && !initialized) {
-    setName(ticketData.name || "");
-    setPhone(ticketData.phone_no || "");
-    setAddress(ticketData.address || "");
-    setEmail(ticketData.email || "");
-    setDescription(ticketData.description || "");
-    setDeliveryDate(ticketData.delivery_date || "");
-    setMechanic(ticketData.mechanic || "");
+    // Form fields
+    setName(String(ticketData.name || ""));
+    setPhone(String(ticketData.phone_no || ""));
+    setAddress(String(ticketData.address || ""));
+    setEmail(String(ticketData.email || ""));
+    setDescription(String(ticketData.description || ""));
+    setDeliveryDate(String(ticketData.delivery_date || ""));
+    setMechanic(String(ticketData.mechanic || ""));
     setSpecialOrder(ticketData.special_order === "Yes");
-    setNotes(ticketData.notes || "");
+    setNotes(String(ticketData.notes || ""));
     setPaymentMethod((ticketData.payment_option || "") as PaymentMethod);
-    setValidatedBy(ticketData.validated_by || "");
+    setValidatedBy(String(ticketData.validated_by || ""));
     setDepositAmount(String(ticketData.credited_amount || ""));
-    setDiscountCode(ticketData.discount_code || "");
-    setTicketStatus(ticketData.status || "Pending");
-    setPaymentStatusState(ticketData.payment_status || "Unpaid");
-    setMultiBike(ticketData.enable_multiple_bikes || false);
+    setDiscountCode(String(ticketData.discount_code || ""));
+    setTicketStatus(String(ticketData.status || "Pending"));
+    setPaymentStatusState(String(ticketData.payment_status || "Unpaid"));
+    setMultiBike(ticketData.enable_multiple_bikes === true);
 
-    // Load existing cart items
-    if (ticketData.bikes?.length > 0 && ticketData.enable_multiple_bikes) {
-      setBikes(ticketData.bikes.map((b: Record<string, unknown>, i: number) => ({
-        bike_id: (b.bike_id as number) || i + 1,
-        bike_name: (b.bike_name as string) || `Bike ${i + 1}`,
+    // Helper to safely parse numbers from API (which may return strings)
+    const num = (v: unknown): number => Number(v) || 0;
+
+    // Load existing cart items — bikes_data is the correct API field (NOT bikes)
+    const bikesArray = ticketData.bikes_data?.bikes as Array<Record<string, unknown>> | undefined;
+
+    if (bikesArray && bikesArray.length > 0 && ticketData.enable_multiple_bikes) {
+      // Multi-bike mode
+      setBikes(bikesArray.map((b, i) => ({
+        bike_id: num(b.bike_id) || i + 1,
+        bike_name: String(b.bike_name || `Bike ${i + 1}`),
         services: ((b.services as Array<Record<string, unknown>>) || []).map((s) => ({
-          service_id: s.id as number || s.service_id as number,
-          name: s.name as string,
-          price: (s.total_price as number) || (s.price as number) || 0,
-          original_price: (s.price as number) || 0,
+          service_id: num(s.id || s.service_id),
+          name: String(s.name || ""),
+          price: num(s.total_price || s.price),
+          original_price: num(s.price),
           taxable: (s.taxable as boolean) ?? true,
         })),
         custom_items: ((b.custom_services as Array<Record<string, unknown>>) || []).map((c, ci) => ({
           id: `custom-${ci}`,
-          name: c.name as string,
-          price: (c.price as number) || 0,
-          original_price: (c.price as number) || 0,
-          quantity: (c.quantity as number) || 1,
+          name: String(c.name || ""),
+          price: num(c.price),
+          original_price: num(c.price),
+          quantity: num(c.quantity) || 1,
           taxable: (c.taxable as boolean) ?? false,
         })),
         inventory_items: ((b.inventory_items as Array<Record<string, unknown>>) || []).map((inv) => ({
-          item_id: inv.item_id as string,
-          item_name: inv.item_name as string,
-          upc_ean: inv.upc_ean as string || "",
-          price: (inv.price as number) || 0,
-          original_price: (inv.price as number) || 0,
-          quantity: (inv.quantity as number) || 1,
+          item_id: String(inv.item_id || ""),
+          item_name: String(inv.item_name || inv.name || ""),
+          upc_ean: String(inv.upc_ean || ""),
+          price: num(inv.price),
+          original_price: num(inv.price),
+          quantity: num(inv.quantity) || 1,
           taxable: (inv.taxable as boolean) ?? true,
         })),
       })));
     } else {
       // Single bike mode — load from flat arrays
+      const svcList = (ticketData.services || []) as Array<Record<string, unknown>>;
+      const customList = (ticketData.custom_services || []) as Array<Record<string, unknown>>;
+      const invList = (ticketData.inventory_items || []) as Array<Record<string, unknown>>;
+
       const singleBike: BikeCart = {
-        bike_id: 1, bike_name: "Bike 1",
-        services: (ticketData.services || []).map((s: Record<string, unknown>) => ({
-          service_id: s.id as number, name: s.name as string,
-          price: (s.total_price as number) || (s.price as number) || 0,
-          original_price: (s.price as number) || 0, taxable: (s.taxable as boolean) ?? true,
+        bike_id: 1,
+        bike_name: "Bike 1",
+        services: svcList.map((s) => ({
+          service_id: num(s.id),
+          name: String(s.name || ""),
+          price: num(s.total_price || s.price),
+          original_price: num(s.price),
+          taxable: (s.taxable as boolean) ?? true,
         })),
-        custom_items: (ticketData.custom_services || []).map((c: Record<string, unknown>, ci: number) => ({
-          id: `custom-${ci}`, name: c.name as string,
-          price: (c.price as number) || 0, original_price: (c.price as number) || 0,
-          quantity: (c.quantity as number) || 1, taxable: (c.taxable as boolean) ?? false,
+        custom_items: customList.map((c, ci) => ({
+          id: `custom-${ci}`,
+          name: String(c.name || ""),
+          price: num(c.price),
+          original_price: num(c.price),
+          quantity: num(c.quantity) || 1,
+          taxable: (c.taxable as boolean) ?? false,
         })),
-        inventory_items: (ticketData.inventory_items || []).map((inv: Record<string, unknown>) => ({
-          item_id: inv.item_id as string, item_name: inv.item_name as string,
-          upc_ean: inv.upc_ean as string || "", price: (inv.price as number) || 0,
-          original_price: (inv.price as number) || 0, quantity: (inv.quantity as number) || 1,
+        inventory_items: invList.map((inv) => ({
+          item_id: String(inv.item_id || ""),
+          item_name: String(inv.item_name || inv.name || ""),
+          upc_ean: String(inv.upc_ean || ""),
+          price: num(inv.price),
+          original_price: num(inv.price),
+          quantity: num(inv.quantity) || 1,
           taxable: (inv.taxable as boolean) ?? true,
         })),
       };
       setBikes([singleBike]);
     }
+
     if (ticketData.terminal_payment_enabled) setStripeEnabled(true);
     setInitialized(true);
   }

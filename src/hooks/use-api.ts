@@ -176,7 +176,8 @@ export function useTicketByInvoiceNumber(invoiceNumber: string) {
       const { data } = await api.get("/crm/bike-tickets/by_invoice_number/", {
         params: { automatic_generated_invoice_number: invoiceNumber },
       });
-      return data;
+      // API returns an array — unwrap to single object
+      return Array.isArray(data) ? data[0] : data;
     },
     enabled: !!invoiceNumber,
   });
